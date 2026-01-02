@@ -195,7 +195,12 @@ if st.button("🚀 生成報表"):
         rR += 1
         
         # 今日全體大計
-        gr, gb, gd = df['實收'].sum(), ch_d['檳榔'].sum()+tc_d['檳榔'].sum(), df['帳差'].sum()
+        ch_total = ch_d['實收'].sum()
+        tc_total = tc_d['實收'].sum()
+
+        gr = ch_total + tc_total
+        gb = ch_d['檳榔'].sum() + tc_d['檳榔'].sum()
+        gd = df['帳差'].sum()
         ws.cell(rR, 15, gb).font=font_b; ws.cell(rR, 16, gr).font=font_b; ws.cell(rR, 18, gr).font=font_b
         cd = ws.cell(rR, 17, gd); cd.font=font_red if gd<0 else (font_blue if gd>0 else font_b)
         for c in [15, 16, 17, 18]: ws.cell(rR, c).number_format='#,##0'; ws.cell(rR, c).alignment=align_c
