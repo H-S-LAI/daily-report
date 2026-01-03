@@ -30,7 +30,7 @@ def load_data(file):
         
         df = df[list(actual_rename.keys())].rename(columns=actual_rename)
 
-        # [關鍵修正] 剔除系統自動生成的「總計」列 (避免金額加倍)
+        # [關鍵修正] 剔除系統自動生成的「總計」列，避免金額加倍
         if '店名' in df.columns:
             df = df.dropna(subset=['店名'])
 
@@ -38,7 +38,7 @@ def load_data(file):
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
         
-        # 區域歸類
+        # 區域歸類：日紅算在彰化
         if '區域' in df.columns:
             df['區域'] = df['區域'].astype(str).str.strip()
             df.loc[df['區域'].str.contains('日紅|彰化'), '區域'] = '彰化'
@@ -75,8 +75,9 @@ def get_cumulative(file_content, current_date):
         return 0, 0, 0
 
 # --- 3. 網頁介面 ---
-st.set_page_config(page_title="直營店日報產生器 V18", layout="wide")
-st.title("🍹 直營店日報自動化系統 V18")
+st.set_page_config(page_title="直營店日報產生器 V19", layout="wide")
+# [修正] 換成專業報表 Emoji
+st.title("📊 直營店日報自動化系統 V19")
 
 f1 = st.file_uploader("1. 上傳當日系統原始檔", type=['csv', 'xlsx'])
 f2 = st.file_uploader("2. 上傳目前的月累計 Excel (非 1 號必傳)", type=['xlsx'])
@@ -112,21 +113,20 @@ if st.button("🚀 生成報表"):
         align_r = Alignment('right', 'center', wrap_text=True)
         align_l_top = Alignment('left', 'top', wrap_text=True)
         
-        font_title = Font('微軟正黑體', 16, bold=True)
-        font_header = Font('微軟正黑體', 12, bold=False)
+        font_title = Font('微軟正黑體', 16, bold=True)      # 標題 16
+        font_header = Font('微軟正黑體', 12, bold=False)     # 表頭 12
         
-        # [關鍵修正] 將所有數字字體改為 12，以適應窄欄寬
-        font_small = Font('微軟正黑體', 12) 
-        font_n = Font('微軟正黑體', 12)        # 改回 12
-        font_b = Font('微軟正黑體', 12, bold=True) # 改回 12
-        font_red = Font('微軟正黑體', 12, color="FF0000", bold=True)
-        font_blue = Font('微軟正黑體', 12, color="0000FF", bold=True)
-        font_green = Font('微軟正黑體', 12, color="008000", bold=True)
-        font_panel = Font('微軟正黑體', 12, bold=True)
+        # [關鍵修正] 內容字體改回 10，以適應窄欄寬
+        font_n = Font('微軟正黑體', 10)
+        font_b = Font('微軟正黑體', 10, bold=True)
+        font_red = Font('微軟正黑體', 10, color="FF0000", bold=True)
+        font_blue = Font('微軟正黑體', 10, color="0000FF", bold=True)
+        font_green = Font('微軟正黑體', 10, color="008000", bold=True)
+        font_panel = Font('微軟正黑體', 10, bold=True)
         
         fill_blue = PatternFill('solid', fgColor="D9E1F2")
 
-        # [關鍵修正] 欄寬改回原本設定
+        # [關鍵修正] 欄寬改回原本窄版設定
         col_ws = {
             'A':12,'B':6,'C':8,'D':9,'E':9,'F':6,'G':9,'H':6,'I':6,'J':6,'K':2,
             'L':12,'M':6,'N':8,'O':9,'P':9,'Q':6,'R':9,'S':6,'T':6,'U':6
@@ -162,8 +162,8 @@ if st.button("🚀 生成報表"):
                 # 藍色底線邏輯
                 b_style = border_blue_bottom if i == rows - 1 else border_all_thin
 
-                ws.cell(curr, cs+1, d['班別']).alignment=align_c; ws.cell(curr, cs+1).font=font_small; ws.cell(curr, cs+1).border=b_style
-                ws.cell(curr, cs+2, d['值班者']).alignment=align_c; ws.cell(curr, cs+2).font=font_small; ws.cell(curr, cs+2).border=b_style
+                ws.cell(curr, cs+1, d['班別']).alignment=align_c; ws.cell(curr, cs+1).font=font_n; ws.cell(curr, cs+1).border=b_style
+                ws.cell(curr, cs+2, d['值班者']).alignment=align_c; ws.cell(curr, cs+2).font=font_n; ws.cell(curr, cs+2).border=b_style
                 
                 c_b = ws.cell(curr, cs+3, d['檳榔']); c_b.number_format='#,##0'; c_b.font=font_n; c_b.border=b_style
                 c_r = ws.cell(curr, cs+4, d['實收']); c_r.number_format='#,##0'; c_r.font=font_n; c_r.border=b_style
@@ -200,7 +200,7 @@ if st.button("🚀 生成報表"):
         # --- 寫入資料 ---
         rL, rR = 3, 3
         
-        # 彰化
+        # 彰化 (一般在前，日紅在後)
         ch_d = df[df['區域']=='彰化']
         all_ch = list(dict.fromkeys(ch_d['店名']))
         rihong = [s for s in all_ch if '日紅' in s]
@@ -212,7 +212,7 @@ if st.button("🚀 生成報表"):
         tc_d = df[df['區域']=='台中']
         for s in list(dict.fromkeys(tc_d['店名'])): rR = render_store(tc_d[tc_d['店名']==s], rR, 12)
 
-        # --- 底部統計 ---
+        # --- 底部統計 (字體 10, 藍線) ---
         ws.row_dimensions[rL].height = 22
         ws.cell(rL, 4, ch_d['檳榔'].sum()).font=font_green; ws.cell(rL, 7, ch_d['實收'].sum()).font=font_green
         for c in [4, 7]: ws.cell(rL, c).number_format='#,##0'; ws.cell(rL, c).alignment=align_c
@@ -270,8 +270,21 @@ if st.button("🚀 生成報表"):
                     for cc in range(12, 20): ws.cell(rr, cc).border=border_all_thin
                 curr += 2
             else: curr += 1
+        
+        # [關鍵修正] 列印設定：縮放 70% + 窄邊界
+        ws.page_setup.scale = 70
+        ws.page_setup.fitToPage = False # 必須設為 False 才能讓 scale 生效
+        ws.page_setup.paperSize = 9 # A4
+        ws.page_setup.orientation = 'portrait' # 直向
+        
+        # 邊界設定 (Excel 窄邊界標準: 上下0.75英吋, 左右0.25英吋)
+        ws.page_margins.left = 0.25
+        ws.page_margins.right = 0.25
+        ws.page_margins.top = 0.75
+        ws.page_margins.bottom = 0.75
+        ws.page_margins.header = 0.3
+        ws.page_margins.footer = 0.3
 
-        ws.page_setup.paperSize = 9; ws.page_setup.fitToWidth = 1
         out = io.BytesIO(); wb.save(out)
         st.success(f"✅ {sn} 報表生成完成！")
         st.download_button("💾 下載最新報表", out.getvalue(), f"日報表_{report_date.strftime('%Y%m%d')}.xlsx")
