@@ -38,7 +38,7 @@ def load_data(file):
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
         
-        # [關鍵修正 1] 標記日紅店 (在改名之前先標記)
+        # 標記日紅店 (在改名之前先標記)
         df['IsRihong'] = False
         if '區域' in df.columns:
             df['區域'] = df['區域'].astype(str).str.strip()
@@ -80,8 +80,8 @@ def get_cumulative(file_content, current_date):
         return 0, 0, 0
 
 # --- 3. 網頁介面 ---
-st.set_page_config(page_title="直營店日報產生器 V21", layout="wide")
-st.title("📊 直營店日報自動化系統 V21")
+st.set_page_config(page_title="直營店日報產生器 V22", layout="wide")
+st.title("📊 直營店日報自動化系統 V22")
 
 f1 = st.file_uploader("1. 上傳當日系統原始檔", type=['csv', 'xlsx'])
 f2 = st.file_uploader("2. 上傳目前的月累計 Excel (非 1 號必傳)", type=['xlsx'])
@@ -120,23 +120,22 @@ if st.button("🚀 生成報表"):
         font_title = Font('微軟正黑體', 16, bold=True)
         font_header = Font('微軟正黑體', 12, bold=False)
         
-        # [關鍵修正 2] 字體大小分流設定
-        font_content_12 = Font('微軟正黑體', 12)          # 明細內容 (數字)
-        font_content_12_b = Font('微軟正黑體', 12, bold=True) # 明細內容 (店名/合計)
+        # 字體大小設定
+        font_content_12 = Font('微軟正黑體', 12)          # 明細內容
+        font_content_12_b = Font('微軟正黑體', 12, bold=True) # 明細店名
         font_red_12 = Font('微軟正黑體', 12, color="FF0000", bold=True)
         font_blue_12 = Font('微軟正黑體', 12, color="0000FF", bold=True)
         
-        font_sum_10 = Font('微軟正黑體', 10, bold=True)     # 底部小計/大計 (改小以防爆格)
+        font_sum_10 = Font('微軟正黑體', 10, bold=True)     # 底部小計/大計 (10號)
         font_sum_green_10 = Font('微軟正黑體', 10, color="008000", bold=True)
         font_sum_red_10 = Font('微軟正黑體', 10, color="FF0000", bold=True)
         font_sum_blue_10 = Font('微軟正黑體', 10, color="0000FF", bold=True)
         
-        font_panel_14 = Font('微軟正黑體', 14, bold=True)    # Panel B 維持大字
+        font_panel_14 = Font('微軟正黑體', 14, bold=True)    # Panel B (14號)
         font_note_12 = Font('微軟正黑體', 12)               # 備註文字
 
         fill_blue = PatternFill('solid', fgColor="D9E1F2")
 
-        # 欄寬維持窄版 (配合 10/12 號字)
         col_ws = {
             'A':12,'B':6,'C':8,'D':9,'E':9,'F':6,'G':9,'H':6,'I':6,'J':6,'K':2,
             'L':12,'M':6,'N':8,'O':9,'P':9,'Q':6,'R':9,'S':6,'T':6,'U':6
@@ -212,15 +211,39 @@ if st.button("🚀 生成報表"):
         # --- 寫入資料 ---
         rL, rR = 3, 3
         
-        # 彰化 (一般在前，日紅在後)
+        # 彰化 (自訂排序邏輯)
         ch_d = df[df['區域']=='彰化']
-        # [關鍵修正] 使用 IsRihong 標記進行精準排序
-        all_ch = list(dict.fromkeys(ch_d['店名']))
-        rihong = ch_d[ch_d['IsRihong'] == True]['店名'].unique().tolist()
-        normal = [s for s in all_ch if s not in rihong]
-        sorted_ch = normal + rihong
+        all_ch_names = list(dict.fromkeys(ch_d['店名'])) # 取得所有店名(不重複)
         
-        for s in sorted_ch: rL = render_store(ch_d[ch_d['店名']==s], rL, 1)
+        # 1. 抓出特殊店
+        huashan = next((s for s in all_ch_names if '華山' in s), None)
+        jinmei = next((s for s in all_ch_names if '金美' in s), None)
+        zhangcao = next((s for s in all_ch_names if '彰草' in s), None)
+        rihong_list = ch_d[ch_d['IsRihong'] == True]['店名'].unique().tolist()
+        
+        # 2. 建立「一般清單」 (排除 日紅、華山、金美)
+        exclude = set(rihong_list)
+        if huashan: exclude.add(huashan)
+        if jinmei: exclude.add(jinmei)
+        
+        normal_list = [s for s in all_ch_names if s not in exclude]
+
+        # 3. 處理「金美」放在「彰草」下面
+        if jinmei and zhangcao and zhangcao in normal_list:
+            idx = normal_list.index(zhangcao)
+            normal_list.insert(idx + 1, jinmei)
+        elif jinmei:
+            # 如果沒找到彰草，暫時放一般清單最後
+            normal_list.append(jinmei)
+        
+        # 4. 組合最終順序：一般(含金美) -> 日紅 -> 華山
+        final_sort = normal_list + rihong_list
+        if huashan:
+            final_sort.append(huashan)
+        
+        # 執行繪製
+        for s in final_sort: 
+            rL = render_store(ch_d[ch_d['店名']==s], rL, 1)
 
         # 台中
         tc_d = df[df['區域']=='台中']
@@ -250,7 +273,7 @@ if st.button("🚀 生成報表"):
         
         ws.row_dimensions[rR].height = 22
         gr, gb, gd = df['實收'].sum(), ch_d['檳榔'].sum()+tc_d['檳榔'].sum(), df['帳差'].sum()
-        # [關鍵修正] 全體合計使用 font_sum_10 (10號粗體)
+        # 全體合計使用 font_sum_10 (10號粗體)
         ws.cell(rR, 15, gb).font=font_sum_10; ws.cell(rR, 16, gr).font=font_sum_10; ws.cell(rR, 18, gr).font=font_sum_10
         cd = ws.cell(rR, 17, gd); cd.font=font_sum_red_10 if gd<0 else (font_sum_blue_10 if gd>0 else font_sum_10)
         for c in [15, 16, 17, 18]: ws.cell(rR, c).number_format='#,##0'; ws.cell(rR, c).alignment=align_c
