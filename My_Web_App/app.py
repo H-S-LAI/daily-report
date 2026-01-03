@@ -75,8 +75,8 @@ def get_cumulative(file_content, current_date):
         return 0, 0, 0
 
 # --- 3. 網頁介面 ---
-st.set_page_config(page_title="直營店日報產生器 V23", layout="wide")
-st.title("📊 直營店日報自動化系統 V23")
+st.set_page_config(page_title="直營店日報產生器 V24", layout="wide")
+st.title("📊 直營店日報自動化系統 V24")
 
 f1 = st.file_uploader("1. 上傳當日系統原始檔", type=['csv', 'xlsx'])
 f2 = st.file_uploader("2. 上傳目前的月累計 Excel (非 1 號必傳)", type=['xlsx'])
@@ -107,8 +107,9 @@ if st.button("🚀 生成報表"):
         
         border_all_thin = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
         border_blue_bottom = Border(left=thin_side, right=thin_side, top=thin_side, bottom=blue_side)
-        # [關鍵修正] 定義無框線樣式
-        no_border = Border() 
+        
+        # [關鍵修正] 定義「只有底線」的樣式
+        border_bottom_only = Border(bottom=thin_side)
 
         align_c = Alignment('center', 'center', wrap_text=True)
         align_r = Alignment('right', 'center', wrap_text=True)
@@ -211,7 +212,7 @@ if st.button("🚀 生成報表"):
         ch_d = df[df['區域']=='彰化']
         all_ch_names = list(dict.fromkeys(ch_d['店名']))
         
-        # [關鍵修正] 指定排序邏輯
+        # 1. 抓出指定的後段班
         tail_keywords = ['華山', '金美', '彰草', '日華']
         tail_stores = []
         for kw in tail_keywords:
@@ -219,7 +220,7 @@ if st.button("🚀 生成報表"):
             if found:
                 tail_stores.append(found)
         
-        # 剩餘的店排前面
+        # 2. 剩餘的店排前面
         normal_stores = [s for s in all_ch_names if s not in tail_stores]
         final_sort = normal_stores + tail_stores
         
@@ -237,13 +238,13 @@ if st.button("🚀 生成報表"):
         for c in range(1, 11): ws.cell(rL, c).border=border_all_thin
         rL += 1
         
-        # 備註區 (12號字, 移除框線)
+        # 備註區 (12號字, 改為只有底線)
         for lbl in ["班別入帳：", "轉入轉出：", "調入調出："]:
             ws.merge_cells(start_row=rL, start_column=1, end_row=rL+1, end_column=10)
             ws.cell(rL, 1, lbl).alignment=align_l_top; ws.cell(rL, 1, lbl).font=font_note_12
             for ro in range(2): 
                 ws.row_dimensions[rL+ro].height = 22
-                for ci in range(1, 11): ws.cell(rL+ro, ci).border=no_border # [修正] 無框線
+                for ci in range(1, 11): ws.cell(rL+ro, ci).border=border_bottom_only # [修正] 僅底線
             rL += 2
 
         ws.row_dimensions[rR].height = 22
@@ -260,7 +261,7 @@ if st.button("🚀 生成報表"):
         for c in range(12, 22): ws.cell(rR, c).border=border_all_thin
         rR += 1
 
-        # Panel B (移除框線)
+        # Panel B (改為只有底線)
         ms = report_date.replace(day=1)
         dr = f"{ms.month}/{ms.day}-{report_date.month}/{report_date.day}"
         pd_data = [
@@ -276,10 +277,9 @@ if st.button("🚀 生成報表"):
             ws.cell(curr, 16, val).number_format='#,##0'; ws.cell(curr, 16, val).font=font_panel_14; ws.cell(curr, 16, val).alignment=align_c
             for rr in range(curr, curr+2):
                 ws.row_dimensions[rr].height = 22
-                for cc in range(12, 20): ws.cell(rr, cc).border=no_border # [修正] 無框線
+                for cc in range(12, 20): ws.cell(rr, cc).border=border_bottom_only # [修正] 僅底線
             curr += 2
             
-        # [修正] 移除空字串，去掉空列
         for lbl in ["彰化區未收款：", "台中區未收款：", "現金正負差：", "實收總金額："]:
             if lbl:
                 ws.merge_cells(start_row=curr, start_column=12, end_row=curr+1, end_column=15)
@@ -287,7 +287,7 @@ if st.button("🚀 生成報表"):
                 ws.merge_cells(start_row=curr, start_column=16, end_row=curr+1, end_column=19)
                 for rr in range(curr, curr+2):
                     ws.row_dimensions[rr].height = 22
-                    for cc in range(12, 20): ws.cell(rr, cc).border=no_border # [修正] 無框線
+                    for cc in range(12, 20): ws.cell(rr, cc).border=border_bottom_only # [修正] 僅底線
                 curr += 2
         
         # 列印設定：縮放 65%, 窄邊界
