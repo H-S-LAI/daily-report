@@ -30,17 +30,21 @@ def load_data(file):
         
         df = df[list(actual_rename.keys())].rename(columns=actual_rename)
 
+        # [關鍵修正 1] 剔除系統自動生成的「總計」列
+        # 通常總計列的「店名」會是空的 (NaN)，這會導致總數變兩倍
+        if '店名' in df.columns:
+            df = df.dropna(subset=['店名'])
+
         for col in ['檳榔', '實收', '帳差']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
         
-        # [區域歸類] 日紅店必須算在彰化
+        # 區域歸類：日紅算在彰化
         if '區域' in df.columns:
             df['區域'] = df['區域'].astype(str).str.strip()
             df.loc[df['區域'].str.contains('日紅|彰化'), '區域'] = '彰化'
             df.loc[df['區域'].str.contains('台中'), '區域'] = '台中'
         
-        # 帳差加負號
         if '帳差' in df.columns:
             df['帳差'] = df['帳差'] * -1
         
@@ -50,11 +54,10 @@ def load_data(file):
         st.error(f"讀取資料失敗：{e}")
         return None, None
 
-# --- 2. 讀取昨日累計 (含公式數值) ---
+# --- 2. 讀取昨日累計 ---
 def get_cumulative(file_content, current_date):
     if current_date.day == 1: return 0, 0, 0
     try:
-        # data_only=True 確保讀到公式計算後的數字
         temp_wb = load_workbook(io.BytesIO(file_content), data_only=True)
         names = temp_wb.sheetnames
         prev_name = (current_date - timedelta(days=1)).strftime("%m-%d")
@@ -73,8 +76,8 @@ def get_cumulative(file_content, current_date):
         return 0, 0, 0
 
 # --- 3. 網頁介面 ---
-st.set_page_config(page_title="直營店日報產生器 V16", layout="wide")
-st.title("🍹 直營店日報自動化系統 V16")
+st.set_page_config(page_title="直營店日報產生器 V17", layout="wide")
+st.title("🍹 直營店日報自動化系統 V17")
 
 f1 = st.file_uploader("1. 上傳當日系統原始檔", type=['csv', 'xlsx'])
 f2 = st.file_uploader("2. 上傳目前的月累計 Excel (非 1 號必傳)", type=['xlsx'])
@@ -100,34 +103,45 @@ if st.button("🚀 生成報表"):
         ws = wb.create_sheet(sn)
 
         # --- 樣式定義 ---
-        # 邊框定義
         thin_side = Side('thin')
-        blue_side = Side('thin', color='0000FF') # 藍色邊框
+        # [關鍵修正 4] 定義明顯的藍色邊框
+        blue_side = Side('medium', color='0000FF') # 改用 medium 讓線條更明顯
         
         border_all_thin = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
-        # 底部藍線樣式 (用於店鋪分隔)
         border_blue_bottom = Border(left=thin_side, right=thin_side, top=thin_side, bottom=blue_side)
 
         align_c = Alignment('center', 'center', wrap_text=True)
         align_r = Alignment('right', 'center', wrap_text=True)
         align_l_top = Alignment('left', 'top', wrap_text=True)
         
-        # 字體設定 (依需求調整)
-        font_title = Font('微軟正黑體', 16, bold=True)      # 標題 16
-        font_header = Font('微軟正黑體', 12, bold=False)     # 表頭 12 (預設) - 雖然你沒特別說表頭要改，但配合整體我設12
-        font_n = Font('微軟正黑體', 14)                    # 一般數字 14
-        font_b = Font('微軟正黑體', 14, bold=True)         # 粗體數字 14
+        font_title = Font('微軟正黑體', 16, bold=True)
+        font_header = Font('微軟正黑體', 12, bold=False)
+        
+        # [關鍵修正 3] 字體分流：小字(12) 給班別/人名，大字(14) 給金額
+        font_small = Font('微軟正黑體', 12) 
+        font_n = Font('微軟正黑體', 14)
+        font_b = Font('微軟正黑體', 14, bold=True)
         font_red = Font('微軟正黑體', 14, color="FF0000", bold=True)
         font_blue = Font('微軟正黑體', 14, color="0000FF", bold=True)
         font_green = Font('微軟正黑體', 14, color="008000", bold=True)
-        font_panel = Font('微軟正黑體', 14, bold=True)     # Panel B 14
+        font_panel = Font('微軟正黑體', 14, bold=True)
         
         fill_blue = PatternFill('solid', fgColor="D9E1F2")
 
-        col_ws = {'A':12,'B':6,'C':8,'D':9,'E':9,'F':6,'G':9,'H':6,'I':6,'J':6,'K':2,'L':12,'M':6,'N':8,'O':9,'P':9,'Q':6,'R':9,'S':6,'T':6,'U':6}
+        # [關鍵修正 2] 大幅加寬金額欄位，解決 ##### 問題
+        # 金額欄位 (D, E, F, G, H, I) 加大到 16
+        # Panel B 金額欄位 (O, P, S) 也要加大
+        col_ws = {
+            'A':13,        # 店名
+            'B':7,         # 班別 (字小，不用太寬)
+            'C':10,        # 值班者 (字小，不用太寬)
+            'D':16, 'E':16, 'F':16, 'G':16, 'H':16, 'I':16, 'J':6, 'K':2, # 金額加寬
+            'L':13, 'M':7, 'N':10, 
+            'O':16, 'P':16, 'Q':16, 'R':16, 'S':16, 'T':16, 'U':6         # 右側金額加寬
+        }
         for k, v in col_ws.items(): ws.column_dimensions[k].width = v
 
-        # 標題列 (字級 16)
+        # 標題列
         tw_year = report_date.year - 1911
         date_str = f" {tw_year}年{report_date.month}月{report_date.day}日"
         ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=10)
@@ -135,55 +149,52 @@ if st.button("🚀 生成報表"):
         ws.merge_cells(start_row=1, start_column=12, end_row=1, end_column=21)
         ws['L1']=f"{date_str} 直營店營收報表 (台中區)"; ws['L1'].font=font_title; ws['L1'].alignment=align_c
 
-        # 表頭 (修正檳榔換行)
+        # 表頭
         headers = ['店名', '班別', '值班者', '檳榔\n金額', '實收\n金額', '帳差', '合計', '收款', '實差', '現金\n合計']
         for i, h in enumerate(headers):
             for sc in [1, 12]:
                 c = ws.cell(row=2, column=sc+i, value=h)
-                c.border=border_all_thin; c.alignment=align_c; c.fill=fill_blue
-                c.font = font_header # 表頭字體
-        ws.row_dimensions[2].height = 30 # 表頭高一點以容納換行
+                c.border=border_all_thin; c.alignment=align_c; c.fill=fill_blue; c.font = font_header
+        ws.row_dimensions[2].height = 30
 
         # --- 繪製函數 ---
         def render_store(df_s, r, cs):
             if df_s.empty: return r
             rows = len(df_s)
             
-            # 寫入內容
             for i in range(rows):
                 curr = r + i
                 d = df_s.iloc[i]
-                
-                # 設定列高 22
                 ws.row_dimensions[curr].height = 22
                 
-                # 判斷是否為該店最後一行 (決定格線顏色)
-                current_border = border_blue_bottom if i == rows - 1 else border_all_thin
+                # 判斷邊框：若是該店最後一行，使用藍色底線
+                b_style = border_blue_bottom if i == rows - 1 else border_all_thin
 
-                ws.cell(curr, cs+1, d['班別']).alignment=align_c; ws.cell(curr, cs+1).font=font_n; ws.cell(curr, cs+1).border=current_border
-                ws.cell(curr, cs+2, d['值班者']).alignment=align_c; ws.cell(curr, cs+2).font=font_n; ws.cell(curr, cs+2).border=current_border
+                # 班別、值班者 -> 改用 font_small (12)
+                ws.cell(curr, cs+1, d['班別']).alignment=align_c; ws.cell(curr, cs+1).font=font_small; ws.cell(curr, cs+1).border=b_style
+                ws.cell(curr, cs+2, d['值班者']).alignment=align_c; ws.cell(curr, cs+2).font=font_small; ws.cell(curr, cs+2).border=b_style
                 
-                c_b = ws.cell(curr, cs+3, d['檳榔']); c_b.number_format='#,##0'; c_b.font=font_n; c_b.border=current_border
-                c_r = ws.cell(curr, cs+4, d['實收']); c_r.number_format='#,##0'; c_r.font=font_n; c_r.border=current_border
+                # 金額 -> 維持 font_n (14)
+                c_b = ws.cell(curr, cs+3, d['檳榔']); c_b.number_format='#,##0'; c_b.font=font_n; c_b.border=b_style
+                c_r = ws.cell(curr, cs+4, d['實收']); c_r.number_format='#,##0'; c_r.font=font_n; c_r.border=b_style
                 
-                dv = d['帳差']; cd = ws.cell(curr, cs+5, dv); cd.number_format='#,##0'; cd.alignment=align_c; cd.border=current_border
+                dv = d['帳差']; cd = ws.cell(curr, cs+5, dv); cd.number_format='#,##0'; cd.alignment=align_c; cd.border=b_style
                 cd.font = font_red if dv<0 else (font_blue if dv>0 else font_n)
                 
-                # 後面空白格也要畫線
-                for x in range(6, 10): ws.cell(curr, cs+x).border=current_border
+                # 空白格補線
+                for x in range(6, 10): ws.cell(curr, cs+x).border=b_style
 
-            # 合併儲存格 (店名、合計) - 這些跨列的儲存格，邊框要特別處理
+            # 合併區塊 (店名、合計)
             # 店名
             ws.merge_cells(start_row=r, start_column=cs, end_row=r+rows-1, end_column=cs)
             c_name = ws.cell(r, cs, df_s.iloc[0]['店名'])
             c_name.font=font_b; c_name.alignment=align_c
-            # 補邊框 (OpenPyXL合併單元格邊框需對左上角設定，但底部邊框需對所有底層單元格設定)
-            # 這裡簡化處理：對合併區域的四個角或邊緣設定
+            # 補合併單元格的邊框
             for i in range(rows):
                 b_style = border_blue_bottom if i == rows - 1 else border_all_thin
                 ws.cell(r+i, cs).border = b_style
 
-            # 合計
+            # 合計 (金額字體 14)
             ws.merge_cells(start_row=r, start_column=cs+6, end_row=r+rows-1, end_column=cs+6)
             c_tot = ws.cell(r, cs+6, df_s['實收'].sum())
             c_tot.font=font_b; c_tot.alignment=align_c; c_tot.number_format='#,##0'
@@ -191,7 +202,7 @@ if st.button("🚀 生成報表"):
                 b_style = border_blue_bottom if i == rows - 1 else border_all_thin
                 ws.cell(r+i, cs+6).border = b_style
             
-            # 現金合計(空白)
+            # 現金合計 (空白)
             ws.merge_cells(start_row=r, start_column=cs+9, end_row=r+rows-1, end_column=cs+9)
             for i in range(rows):
                 b_style = border_blue_bottom if i == rows - 1 else border_all_thin
@@ -199,53 +210,42 @@ if st.button("🚀 生成報表"):
 
             return r + rows
 
-        # --- 資料分群與排序 (日紅沉底) ---
+        # --- 寫入資料 ---
         rL, rR = 3, 3
         
-        # 彰化區
+        # 彰化 (一般在前，日紅在後)
         ch_d = df[df['區域']=='彰化']
-        all_ch_stores = list(dict.fromkeys(ch_d['店名']))
-        # 分離日紅與非日紅
-        rihong_stores = [s for s in all_ch_stores if '日紅' in s]
-        normal_stores = [s for s in all_ch_stores if '日紅' not in s]
-        # 合併順序：先一般，後日紅
-        sorted_ch_stores = normal_stores + rihong_stores
-        
-        for s in sorted_ch_stores: 
-            rL = render_store(ch_d[ch_d['店名']==s], rL, 1)
+        all_ch = list(dict.fromkeys(ch_d['店名']))
+        rihong = [s for s in all_ch if '日紅' in s]
+        normal = [s for s in all_ch if '日紅' not in s]
+        sorted_ch = normal + rihong
+        for s in sorted_ch: rL = render_store(ch_d[ch_d['店名']==s], rL, 1)
 
-        # 台中區 (直接排序)
+        # 台中
         tc_d = df[df['區域']=='台中']
-        for s in list(dict.fromkeys(tc_d['店名'])): 
-            rR = render_store(tc_d[tc_d['店名']==s], rR, 12)
+        for s in list(dict.fromkeys(tc_d['店名'])): rR = render_store(tc_d[tc_d['店名']==s], rR, 12)
 
-        # --- 底部統計 ---
-        # 彰化底部
+        # --- 底部統計 (字體 14, 藍線) ---
         ws.row_dimensions[rL].height = 22
         ws.cell(rL, 4, ch_d['檳榔'].sum()).font=font_green; ws.cell(rL, 7, ch_d['實收'].sum()).font=font_green
-        for c in [4, 7]: ws.cell(rL, c).number_format='#,##0'; ws.cell(rL, c).alignment=align_c; ws.cell(rL, c).border=border_all_thin
-        for c in range(1, 11): 
-            if c not in [4, 7]: ws.cell(rL, c).border=border_all_thin
+        for c in [4, 7]: ws.cell(rL, c).number_format='#,##0'; ws.cell(rL, c).alignment=align_c
+        for c in range(1, 11): ws.cell(rL, c).border=border_all_thin
         rL += 1
         
-        # 備註區 (調入調出)
         for lbl in ["班別入帳：", "轉入轉出：", "調入調出："]:
             ws.merge_cells(start_row=rL, start_column=1, end_row=rL+1, end_column=10)
-            ws.cell(rL, 1, lbl).alignment=align_l_top; ws.cell(rL, 1, lbl).font=font_n # 字級14
+            ws.cell(rL, 1, lbl).alignment=align_l_top; ws.cell(rL, 1, lbl).font=font_n
             for ro in range(2): 
-                ws.row_dimensions[rL+ro].height = 22 # 列高22
+                ws.row_dimensions[rL+ro].height = 22
                 for ci in range(1, 11): ws.cell(rL+ro, ci).border=border_all_thin
             rL += 2
 
-        # 台中底部
         ws.row_dimensions[rR].height = 22
         ws.cell(rR, 15, tc_d['檳榔'].sum()).font=font_green; ws.cell(rR, 18, tc_d['實收'].sum()).font=font_green
-        for c in [15, 18]: ws.cell(rR, c).number_format='#,##0'; ws.cell(rR, c).alignment=align_c; ws.cell(rR, c).border=border_all_thin
-        for c in range(12, 22): 
-            if c not in [15, 18]: ws.cell(rR, c).border=border_all_thin
+        for c in [15, 18]: ws.cell(rR, c).number_format='#,##0'; ws.cell(rR, c).alignment=align_c
+        for c in range(12, 22): ws.cell(rR, c).border=border_all_thin
         rR += 1
         
-        # 今日全體大計
         ws.row_dimensions[rR].height = 22
         gr, gb, gd = df['實收'].sum(), ch_d['檳榔'].sum()+tc_d['檳榔'].sum(), df['帳差'].sum()
         ws.cell(rR, 15, gb).font=font_b; ws.cell(rR, 16, gr).font=font_b; ws.cell(rR, 18, gr).font=font_b
@@ -266,12 +266,10 @@ if st.button("🚀 生成報表"):
         for lbl, val in pd_data:
             ws.merge_cells(start_row=curr, start_column=12, end_row=curr+1, end_column=15)
             ws.cell(curr, 12, lbl).alignment=align_r; ws.cell(curr, 12, lbl).font=font_panel
-            
             ws.merge_cells(start_row=curr, start_column=16, end_row=curr+1, end_column=19)
             ws.cell(curr, 16, val).number_format='#,##0'; ws.cell(curr, 16, val).font=font_panel; ws.cell(curr, 16, val).alignment=align_c
-            
             for rr in range(curr, curr+2):
-                ws.row_dimensions[rr].height = 22 # 列高22
+                ws.row_dimensions[rr].height = 22
                 for cc in range(12, 20): ws.cell(rr, cc).border=border_all_thin
             curr += 2
             
@@ -279,16 +277,14 @@ if st.button("🚀 生成報表"):
             if lbl:
                 ws.merge_cells(start_row=curr, start_column=12, end_row=curr+1, end_column=15)
                 ws.cell(curr, 12, lbl).alignment=align_r; ws.cell(curr, 12, lbl).font=font_panel
-                
                 ws.merge_cells(start_row=curr, start_column=16, end_row=curr+1, end_column=19)
                 for rr in range(curr, curr+2):
-                    ws.row_dimensions[rr].height = 22 # 列高22
+                    ws.row_dimensions[rr].height = 22
                     for cc in range(12, 20): ws.cell(rr, cc).border=border_all_thin
                 curr += 2
             else: curr += 1
 
-        ws.page_setup.paperSize = 9
-        ws.page_setup.fitToWidth = 1
+        ws.page_setup.paperSize = 9; ws.page_setup.fitToWidth = 1
         out = io.BytesIO(); wb.save(out)
         st.success(f"✅ {sn} 報表生成完成！")
         st.download_button("💾 下載最新報表", out.getvalue(), f"日報表_{report_date.strftime('%Y%m%d')}.xlsx")
