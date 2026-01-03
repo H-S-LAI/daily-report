@@ -30,8 +30,7 @@ def load_data(file):
         
         df = df[list(actual_rename.keys())].rename(columns=actual_rename)
 
-        # [關鍵修正 1] 剔除系統自動生成的「總計」列
-        # 通常總計列的「店名」會是空的 (NaN)，這會導致總數變兩倍
+        # [關鍵修正] 剔除系統自動生成的「總計」列 (避免金額加倍)
         if '店名' in df.columns:
             df = df.dropna(subset=['店名'])
 
@@ -39,7 +38,7 @@ def load_data(file):
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
         
-        # 區域歸類：日紅算在彰化
+        # 區域歸類
         if '區域' in df.columns:
             df['區域'] = df['區域'].astype(str).str.strip()
             df.loc[df['區域'].str.contains('日紅|彰化'), '區域'] = '彰化'
@@ -76,8 +75,8 @@ def get_cumulative(file_content, current_date):
         return 0, 0, 0
 
 # --- 3. 網頁介面 ---
-st.set_page_config(page_title="直營店日報產生器 V17", layout="wide")
-st.title("🍹 直營店日報自動化系統 V17")
+st.set_page_config(page_title="直營店日報產生器 V18", layout="wide")
+st.title("🍹 直營店日報自動化系統 V18")
 
 f1 = st.file_uploader("1. 上傳當日系統原始檔", type=['csv', 'xlsx'])
 f2 = st.file_uploader("2. 上傳目前的月累計 Excel (非 1 號必傳)", type=['xlsx'])
@@ -104,8 +103,7 @@ if st.button("🚀 生成報表"):
 
         # --- 樣式定義 ---
         thin_side = Side('thin')
-        # [關鍵修正 4] 定義明顯的藍色邊框
-        blue_side = Side('medium', color='0000FF') # 改用 medium 讓線條更明顯
+        blue_side = Side('medium', color='0000FF') # 藍色邊框
         
         border_all_thin = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
         border_blue_bottom = Border(left=thin_side, right=thin_side, top=thin_side, bottom=blue_side)
@@ -117,27 +115,21 @@ if st.button("🚀 生成報表"):
         font_title = Font('微軟正黑體', 16, bold=True)
         font_header = Font('微軟正黑體', 12, bold=False)
         
-        # [關鍵修正 3] 字體分流：小字(12) 給班別/人名，大字(14) 給金額
+        # [關鍵修正] 將所有數字字體改為 12，以適應窄欄寬
         font_small = Font('微軟正黑體', 12) 
-        font_n = Font('微軟正黑體', 14)
-        font_b = Font('微軟正黑體', 14, bold=True)
-        font_red = Font('微軟正黑體', 14, color="FF0000", bold=True)
-        font_blue = Font('微軟正黑體', 14, color="0000FF", bold=True)
-        font_green = Font('微軟正黑體', 14, color="008000", bold=True)
-        font_panel = Font('微軟正黑體', 14, bold=True)
+        font_n = Font('微軟正黑體', 12)        # 改回 12
+        font_b = Font('微軟正黑體', 12, bold=True) # 改回 12
+        font_red = Font('微軟正黑體', 12, color="FF0000", bold=True)
+        font_blue = Font('微軟正黑體', 12, color="0000FF", bold=True)
+        font_green = Font('微軟正黑體', 12, color="008000", bold=True)
+        font_panel = Font('微軟正黑體', 12, bold=True)
         
         fill_blue = PatternFill('solid', fgColor="D9E1F2")
 
-        # [關鍵修正 2] 大幅加寬金額欄位，解決 ##### 問題
-        # 金額欄位 (D, E, F, G, H, I) 加大到 16
-        # Panel B 金額欄位 (O, P, S) 也要加大
+        # [關鍵修正] 欄寬改回原本設定
         col_ws = {
-            'A':13,        # 店名
-            'B':7,         # 班別 (字小，不用太寬)
-            'C':10,        # 值班者 (字小，不用太寬)
-            'D':16, 'E':16, 'F':16, 'G':16, 'H':16, 'I':16, 'J':6, 'K':2, # 金額加寬
-            'L':13, 'M':7, 'N':10, 
-            'O':16, 'P':16, 'Q':16, 'R':16, 'S':16, 'T':16, 'U':6         # 右側金額加寬
+            'A':12,'B':6,'C':8,'D':9,'E':9,'F':6,'G':9,'H':6,'I':6,'J':6,'K':2,
+            'L':12,'M':6,'N':8,'O':9,'P':9,'Q':6,'R':9,'S':6,'T':6,'U':6
         }
         for k, v in col_ws.items(): ws.column_dimensions[k].width = v
 
@@ -167,34 +159,29 @@ if st.button("🚀 生成報表"):
                 d = df_s.iloc[i]
                 ws.row_dimensions[curr].height = 22
                 
-                # 判斷邊框：若是該店最後一行，使用藍色底線
+                # 藍色底線邏輯
                 b_style = border_blue_bottom if i == rows - 1 else border_all_thin
 
-                # 班別、值班者 -> 改用 font_small (12)
                 ws.cell(curr, cs+1, d['班別']).alignment=align_c; ws.cell(curr, cs+1).font=font_small; ws.cell(curr, cs+1).border=b_style
                 ws.cell(curr, cs+2, d['值班者']).alignment=align_c; ws.cell(curr, cs+2).font=font_small; ws.cell(curr, cs+2).border=b_style
                 
-                # 金額 -> 維持 font_n (14)
                 c_b = ws.cell(curr, cs+3, d['檳榔']); c_b.number_format='#,##0'; c_b.font=font_n; c_b.border=b_style
                 c_r = ws.cell(curr, cs+4, d['實收']); c_r.number_format='#,##0'; c_r.font=font_n; c_r.border=b_style
                 
                 dv = d['帳差']; cd = ws.cell(curr, cs+5, dv); cd.number_format='#,##0'; cd.alignment=align_c; cd.border=b_style
                 cd.font = font_red if dv<0 else (font_blue if dv>0 else font_n)
                 
-                # 空白格補線
                 for x in range(6, 10): ws.cell(curr, cs+x).border=b_style
 
-            # 合併區塊 (店名、合計)
-            # 店名
+            # 合併區塊
             ws.merge_cells(start_row=r, start_column=cs, end_row=r+rows-1, end_column=cs)
             c_name = ws.cell(r, cs, df_s.iloc[0]['店名'])
             c_name.font=font_b; c_name.alignment=align_c
-            # 補合併單元格的邊框
             for i in range(rows):
                 b_style = border_blue_bottom if i == rows - 1 else border_all_thin
                 ws.cell(r+i, cs).border = b_style
 
-            # 合計 (金額字體 14)
+            # 合計
             ws.merge_cells(start_row=r, start_column=cs+6, end_row=r+rows-1, end_column=cs+6)
             c_tot = ws.cell(r, cs+6, df_s['實收'].sum())
             c_tot.font=font_b; c_tot.alignment=align_c; c_tot.number_format='#,##0'
@@ -213,7 +200,7 @@ if st.button("🚀 生成報表"):
         # --- 寫入資料 ---
         rL, rR = 3, 3
         
-        # 彰化 (一般在前，日紅在後)
+        # 彰化
         ch_d = df[df['區域']=='彰化']
         all_ch = list(dict.fromkeys(ch_d['店名']))
         rihong = [s for s in all_ch if '日紅' in s]
@@ -225,7 +212,7 @@ if st.button("🚀 生成報表"):
         tc_d = df[df['區域']=='台中']
         for s in list(dict.fromkeys(tc_d['店名'])): rR = render_store(tc_d[tc_d['店名']==s], rR, 12)
 
-        # --- 底部統計 (字體 14, 藍線) ---
+        # --- 底部統計 ---
         ws.row_dimensions[rL].height = 22
         ws.cell(rL, 4, ch_d['檳榔'].sum()).font=font_green; ws.cell(rL, 7, ch_d['實收'].sum()).font=font_green
         for c in [4, 7]: ws.cell(rL, c).number_format='#,##0'; ws.cell(rL, c).alignment=align_c
