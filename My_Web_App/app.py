@@ -45,7 +45,7 @@ def load_data(file):
             df.loc[df['區域'].str.contains('台中'), '區域'] = '台中'
         
         if '帳差' in df.columns:
-            df['帳差'] = df['帳差'] * -1
+            df['帳差'] = df['帳差']
         
         report_date = pd.to_datetime(df.iloc[0]['日期']) if not df.empty else datetime.now()
         return df, report_date
